@@ -32,14 +32,16 @@ import argparse
 from collections import defaultdict
 import math
 import matplotlib.pyplot as plt
+import json
 
-LABEL_CLASS_NAME = 'two_year_recid'
+LABEL_CLASS_NAME = 'is_recid'
+JSON_FILE_PATH = "../Fairness/NaiveBayesData.json"
 
 class NB:
 
     def __init__(self, training_data, train_labels, include_feats, smooth):
         self.training_data = training_data
-        self.train_labels = train_labels
+        self.train_labels = train_labels # ground truth values, a list of 0s and 1s
         self.include_feats = include_feats
         self.smooth = smooth
         #Ask layla for help--there should be a better way of doing
@@ -120,6 +122,7 @@ class NB:
         log_prob_not = 0
         for feature, value in person.items():
             if feature in self.include_feats:
+                # TODO : this seems to be an error: delete one of the if statements?
                 if (self.recid_probs[feature][value] != 0):
                     log_prob_recid += math.log(self.recid_probs[feature][value])
                 if (self.recid_probs[feature][value] != 0):
@@ -228,6 +231,7 @@ def parse_args():
                         type=str,
                         default='compas-scores-two-years.csv',
                         help='Path to training data')
+    # TODO: add an argument for test data?, change the "def load_data()" function accordingly
     parser.add_argument('--features',
                         type=str,
                         default="sex",
@@ -238,6 +242,15 @@ def parse_args():
                         help="K-smoothing value, defaults to 0 (no smoothing).")
     return parser.parse_args()
 
+# Input: a list of all people (represented by dicts), a list of guesses (0s and 1s)
+# Output: none, but creates a JSON file with the results of the algorithm
+def make_measure_fairness_json(allPeople, guesses):
+    intGuesses = [int(guess) for guess in guesses]
+    data_guesses_dict = {"people":allPeople, "NaiveBayes":intGuesses}
+    data_guesses_str = str(data_guesses_dict)
+
+    with open(JSON_FILE_PATH, 'w') as file:
+        json.dump(data_guesses_dict, file)
 
 
 def main():
@@ -245,8 +258,8 @@ def main():
     train, train_labels, test, test_labels = load_data(args.training_data)
     model = NB(train, train_labels, args.features.split(','), args.ksmooth)
     model.train()
-    #print("Why is this happening? len(test), len(test_labels):",len(test), len(test_labels))
     model.get_accuracy(test, test_labels)
+    make_measure_fairness_json(test, test_labels)
     distances = model.get_distances(train+test, train_labels+test_labels)
     bins = [0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9]
     histogram = plt.hist(distances, bins, density=True)
