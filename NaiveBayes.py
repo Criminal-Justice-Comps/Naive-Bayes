@@ -55,8 +55,8 @@ class NB:
         '''Get the probabilities that a person with a feature with a certain value
         (e.g. sex is Male) will recidivate for every feature:value group in the included
         features.'''
-        num_recid = 0 # the number of people who did recidivate
-        num_not = 0 # the number of people who did not recidivate
+        num_recid = self.smooth # the number of people who did recidivate
+        num_not = self.smooth # the number of people who did not recidivate
         for label in self.train_labels:
             if label == '0':
                 num_not += 1
@@ -128,6 +128,7 @@ class NB:
                 if (self.recid_probs[feature][value] != 0):
                     log_prob_not += math.log(self.not_probs[feature][value])
 
+
         log_prob_recid += math.log(self.num_recid / len(self.training_data))
         log_prob_not += math.log(self.num_not / len(self.training_data))
         prob = math.exp(log_prob_recid) # return a probability not in log space
@@ -147,7 +148,7 @@ class NB:
         else:
             prob, not_prob = self.get_recid_prob(person)
             # get best accuracy if we add 0.075 to prob
-            if prob < not_prob:
+            if prob <= not_prob: # Put <= rather than < to reduce the num of false positives
                 return 0
             else:
                 return 1
@@ -173,24 +174,24 @@ class NB:
         num_correct = 0
         num_pred_recid = 0
         for i in range(len(test_labels)):
-            #print("\nPredicting on person:", test_data[i])
-            #print("\tWe predict:", self.classify(test_data[i]), "with prob of", self.get_recid_prob(test_data[i]))
-            #print("\tGround truth:", test_labels[i])
+            # print("\nPredicting on person:", test_data[i])
+            # print("\tWe predict:", self.classify(test_data[i]), "with prob of", self.get_recid_prob(test_data[i]))
+            # print("\tGround truth:", test_labels[i])
             if self.classify(test_data[i]) == 1:
                 num_pred_recid += 1
             if self.classify(test_data[i]) == int(test_labels[i]):
                 num_correct += 1
         print("Accuracy of:", num_correct/len(test_labels))
-        print("Number predicted to recidivate:", num_pred_recid)
+        print("Number predicted to recidivate in validation set:", num_pred_recid)
 
-    def get_distances(self, test, labels):
-        distances = []
-        for i in range(len(labels)):
-            if labels[i] == '1':
-                distances.append(10 - self.decile_score(test[i])[0])
-            else:
-                distances.append(self.decile_score(test[i])[0] - 1)
-        return distances
+    # def get_distances(self, test, labels):
+    #     distances = []
+    #     for i in range(len(labels)):
+    #         if labels[i] == '1':
+    #             distances.append(10 - self.decile_score(test[i])[0])
+    #         else:
+    #             distances.append(self.decile_score(test[i])[0] - 1)
+    #     return distances
 
 
 def load_data(filepath, train_split=0.9):
@@ -202,7 +203,8 @@ def load_data(filepath, train_split=0.9):
         for line in f:
             person = {}
             split_line = line.split(",")
-            split_line[-1] = split_line[-1][:-1]
+            if split_line[-1][:-1] != '':
+                split_line[-1] = split_line[-1][:-1]
             add_to_labels = False
             for j in range(len(split_line)):
                 if i == 0:
@@ -210,14 +212,12 @@ def load_data(filepath, train_split=0.9):
                 else:
                     if features[j] == LABEL_CLASS_NAME:
                         add_to_labels = True
-                        if split_line[j] == '':
-                            labels.append(0)
-                        else:
-                            labels.append(split_line[j])
+                        labels.append(split_line[j])
                     else:
                         person[features[j]] = split_line[j]
-            all_people.append(person)
-            if not add_to_labels:
+            if i != 0:
+                all_people.append(person)
+            if not add_to_labels and i != 0:
                 print("at index", i, "did not add to labels")
             i += 1
 
@@ -237,7 +237,7 @@ def parse_args():
                         default="sex",
                         help= "Comma seperated features for the classifier to pay attention to.")
     parser.add_argument('--ksmooth',
-                        type=int,
+                        type=float,
                         default=0,
                         help="K-smoothing value, defaults to 0 (no smoothing).")
     return parser.parse_args()
@@ -259,11 +259,11 @@ def main():
     model = NB(train, train_labels, args.features.split(','), args.ksmooth)
     model.train()
     model.get_accuracy(test, test_labels)
-    make_measure_fairness_json(test, test_labels)
-    distances = model.get_distances(train+test, train_labels+test_labels)
-    bins = [0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9]
-    histogram = plt.hist(distances, bins, density=True)
-    plt.show()
+    #make_measure_fairness_json(test, test_labels)
+    # distances = model.get_distances(train+test, train_labels+test_labels)
+    # bins = [0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9]
+    # histogram = plt.hist(distances, bins, density=True)
+    # plt.show()
 
 
 
